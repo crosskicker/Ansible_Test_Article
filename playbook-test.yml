@@ -1,0 +1,90 @@
+---
+- hosts: localhost
+  gather_facts: yes
+  tasks:
+
+    # Variable to store test results
+    - ansible.builtin.set_fact:
+        test_report: []
+
+
+    # Test 1: Check OS version
+    - name: Verify OS version
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_major_version | int >= 20
+        success_msg: "OS conforme"
+        fail_msg: "OS non conforme"
+      register: result
+      ignore_errors: yes
+
+    - ansible.builtin.set_fact:
+            test_report: "{{ test_report + [ { 'test': 'Checkhostname format', 'result': result.failed | ternary('FAIL','PASS') } ] }}"
+
+
+    # Test 2: Check a configuration file
+    - name: Get a distant configuration file
+      ansible.builtin.slurp:
+        src: ./resources/conf_file.ini
+      register: config_file
+
+    - name: Verify a value defined for an option into a configuration file
+      ansible.builtin.assert:
+        that:
+          - "'my_option=my_value' in config_file.content | b64decode"
+        success_msg: "Configuration conforme"
+        fail_msg: "Configuration non conforme"
+      register: result
+      ignore_errors: yes
+
+    - set_fact:
+            test_report: "{{ test_report + [ { 'test': 'Check option value', 'result': result.failed | ternary('FAIL','PASS') } ] }}"
+   
+
+    # Test 3: Check Docker version
+    - name: Get Docker version
+      ansible.builtin.command: docker -v
+      register: docker_version
+      changed_when: false
+
+    - name: Check Docker version
+      ansible.builtin.assert:
+        that:
+          - "'29.2.1' in docker_version.stdout"
+        success_msg: "Docker correct version"
+        fail_msg: "Docker incorrect version"
+      register: result
+      ignore_errors: yes
+
+    - ansible.builtin.set_fact:
+          test_report: "{{ test_report + [ { 'test': 'Check Docker version', 'result': result.failed | ternary('FAIL','PASS') } ] }}"
+        
+
+    # Test 4: Check virsh version
+    - name: Get virsh version
+      ansible.builtin.command: virsh -v
+      register: virsh_version
+    
+    - name: Extract virsh version number
+      ansible.builtin.set_fact:
+        virsh_v: "{{ virsh_version.stdout | regex_search('[0-9]+') | int }}"
+      
+    - name:  Check virsh version
+      ansible.builtin.assert:
+        that:
+          - virsh_v | int > 9
+        success_msg: "Virsh correct version"
+        fail_msg: "Virsh incorrect version"
+      register: result
+      ignore_errors: yes
+      
+    - ansible.builtin.set_fact:
+          test_report: "{{ test_report + [ { 'test': 'Check virsh version', 'result': result.failed | ternary('FAIL','PASS') } ] }}"
+
+
+    # Display tests results
+    - name: Display report
+      ansible.builtin.debug:
+        var: test_report
+      
